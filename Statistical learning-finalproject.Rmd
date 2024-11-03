@@ -1,0 +1,279 @@
+---
+title: "Analysis of Cardiovascular Disease Risk Factors"
+subtitle: 'Statistical Learning'
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+date: "2024-05-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Introduction
+
+The dataset originates from an ongoing cardiovascular study conducted on residents of Framingham, Massachusetts, by the World Health Organization. It aims to predict the 10-year risk of future coronary heart disease (CHD) in patients. The dataset includes over 4,241 records and comprises 16 attributes, which are potential risk factors for CHD. These factors encompass demographic, behavioral, and medical aspects of the patients. Attributes include demographic, behavioral, and medical aspects, such as sex, age, smoking status, blood pressure, cholesterol levels, and diabetes status. Additionally, physiological measurements like total cholesterol, systolic blood pressure, diastolic blood pressure, body mass index (BMI), heart rate, and glucose levels are provided.source link: https://www.kaggle.com/datasets/aasheesh200/framingham-heart-study-dataset
+
+The study seems to focus on Framingham residents, potentially restricting the generalizability of the findings to different population groups. Sampling methods probably included seeking out individuals from the nearby area, which might result in a skewed representation of certain groups if some are disproportionately included or excluded.To mitigate biases and enhance dependability, researchers should employ diverse recruitment methods to ensure inclusion of various demographic groups. Incorporating data from multiple study sites can also improve generalizability beyond the Framingham population. In general, although the Framingham Heart Study dataset provides important information on CHD risk factors, researchers need to account for the study design and population limitations and biases in order to make meaningful conclusions and create effective interventions for cardiovascular health.
+
+The primary prediction problem in this study is to predict the 10-year risk of coronary heart disease (CHD) in individuals based on their demographic, clinical, and lifestyle factors. This prediction problem falls within the realm of binary classification, where individuals are classified into two categories: at-risk and not-at-risk of developing CHD within the next 10 years.To address the dataset's limited size, we employ stratified random sampling for data splitting. This ensures similar distributions of the target variable (CHD presence/absence) and key variables like sex, age, and medical history. We split the available dataset into training and test sets. The training set, comprising 80% of the data, is used to train machine learning models. The remaining 20% constitutes the test set, which serves as an independent dataset for evaluating model performance.Other plans for data usage could include exploratory data analysis, feature engineering, model training, and evaluation.
+
+```{r, message=FALSE}
+# Load the required library
+library(tidyverse)
+library(caret)
+library(ggplot2) 
+library(dplyr)  
+library(tidyr)  
+```
+
+```{r}
+# Load the dataset
+heart_data <- read.csv("C:/Users/katta/OneDrive/Desktop/statistics/statistical learning/framingham.csv")
+
+# Check the structure of the dataset
+str(heart_data)
+
+# Check for missing values
+missing_values <- colSums(is.na(heart_data))
+missing_values
+
+# Remove missing values
+heart_data <- na.omit(heart_data)
+
+# Convert categorical variable to factor
+heart_data$TenyearCHD <- as.factor(heart_data$TenyearCHD)
+heart_data$education <- as.factor(heart_data$education)
+
+# Convert relevant variables to numeric
+numeric_vars <- c("cigsperday", "sysBP", "diaBP", "BMI", "heartrate", "glucose", "age", "totChol")
+heart_data[numeric_vars] <- lapply(heart_data[numeric_vars], as.numeric)
+
+# Check summary of the dataset
+head(heart_data)
+
+```
+
+```{r}
+set.seed(123)  # Set seed for reproducibility
+train_index <- sample(nrow(heart_data), 0.8 * nrow(heart_data))  # 80% train data
+train_data <- heart_data[train_index, ]
+test_data <- heart_data[-train_index, ]
+
+# Summary statistics
+summary(train_data)
+summary(test_data)
+```
+The summary statistics highlight key demographic, clinical, and lifestyle factors influencing the prediction of 10-year coronary heart disease (CHD) risk. They reveal commonalities in age, gender distribution, and prevalence of clinical conditions like hypertension and diabetes. Lifestyle factors such as smoking status vary among individuals. Notably, cholesterol levels, blood pressure, and glucose levels are within ranges linked to cardiovascular risk
+
+## Statistical learning strategies and methods 
+
+**Exploratory Data Analysis using the training set**
+
+Exploratory data analysis is conducted by plotting relationships between various predictor variables and the target variable (TenyearCHD) by gender using histograms and bar plots.
+
+```{r}
+# Define a function to plot relationships between variables
+plot_relationship <- function(data, x_var, fill_var, title, binwidth = NULL) {
+  if (is.numeric(data[[x_var]])) {
+    if (!is.null(binwidth)) {
+      ggplot(data, aes_string(x = x_var, fill = as.factor(data[[fill_var]]))) +
+        geom_histogram(position = "dodge", binwidth = binwidth, color = "black") +
+        labs(title = title,
+             x = x_var,
+             y = "Count",
+             fill = fill_var) +
+        scale_fill_manual(values = c("0" = "coral", "1" = "lightblue")) +
+        facet_wrap(~ sex, labeller = labeller(sex = c("0" = "Female", "1" = "Male"))) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+    } else {
+      ggplot(data, aes_string(x = x_var, fill = as.factor(data[[fill_var]]))) +
+        geom_bar(position = "dodge", color = "black") +
+        labs(title = title,
+             x = x_var,
+             y = "Count",
+             fill = fill_var) +
+        scale_fill_manual(values = c("0" = "coral", "1" = "lightblue")) +
+        facet_wrap(~ sex, labeller = labeller(sex = c("0" = "Female", "1" = "Male"))) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+        scale_x_continuous(breaks = c(0, 1))
+    }
+  } else {
+    ggplot(data, aes_string(x = x_var, fill = as.factor(data[[fill_var]]))) +
+      geom_bar(position = "dodge", color = "black") +
+      labs(title = title,
+           x = x_var,
+           y = "Count",
+           fill = fill_var) +-
+      scale_fill_manual(values = c("0" = "coral", "1" = "lightblue")) +
+      facet_wrap(~ sex, labeller = labeller(sex = c("0" = "Female", "1" = "Male"))) +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),
+            panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+      scale_x_continuous(breaks = c(0, 1))
+  }
+}
+
+plot_relationship(train_data, "age", "TenyearCHD", "Age vs TenyearCHD by Gender", binwidth = 5)
+plot_relationship(train_data, "totChol", "TenyearCHD", "Total Cholesterol (totChol) vs TenyearCHD by Gender", binwidth = 30)
+plot_relationship(train_data, "sysBP", "TenyearCHD", "Systolic Blood Pressure (sysBP) vs TenyearCHD by Gender", binwidth = 8) 
+plot_relationship(train_data, "cigsperday", "TenyearCHD", "Cigarettes per Day vs TenyearCHD by Gender", binwidth = 8) 
+plot_relationship(train_data, "prevalentHyp", "TenyearCHD", "Prevalent Hypertension vs TenyearCHD by Gender")
+plot_relationship(train_data, "prevalentstroke", "TenyearCHD", "Prevalent Stroke vs TenyearCHD by Gender")
+plot_relationship(train_data, "glucose", "TenyearCHD", "Glucose Level vs TenyearCHD by Gender", binwidth = 10)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Age appears to have a positively skewed in males compared to females distribution,implying that older males tend to exhibit a higher risk of coronary heart disease (CHD) 
+Total cholesterol (totChol) and systolic blood pressure (sysBP) also show notable associations with CHD risk, with higher levels potentially indicating increased risk.
+Cigarette consumption (cigsperday) exhibits a dose-response relationship, suggesting that higher smoking rates correspond to elevated CHD risk. The graph shows that men smoke more cigarettes per day than women on average.
+While males show no prevalence of hypertension, they exhibit a higher likelihood of developing CHD after 10 years compared to females. 
+In males without prevalent stroke, there are higher chances of developing CHD after 10 years compared to females. Conversely, both males and females with prevalent stroke have lower chances of CHD after 10 years.
+Individuals with glucose levels around 100 mg/dL exhibit higher chances of coronary heart disease (CHD).
+
+**Feature Engineering Strategies and Applicability in Predictive Modeling**
+
+Feature engineering is a crucial aspect of statistical learning methods, aimed at enhancing model performance by transforming raw data into informative features. A fundamental step in this process involves standardizing or normalizing numerical variables across both the training and test datasets. This standardization mitigates scale-related biases, thereby improving model interpretability and convergence. Additionally, it proves particularly beneficial for algorithms like random forests, where the splitting criterion in decision trees can be influenced by feature scales, potentially impacting overall model performance. 
+
+Following standardization, feature selection is performed using stepwise regression exclusively on the training data. This step is instrumental in identifying a subset of features that exhibit statistical significance in predicting the target variable, TenYearCHD, which represents the ten-year risk of coronary heart disease. By reducing overfitting and computational complexity, feature selection enhances the model's robustness. The resulting selected features, including "sex," "age," "cigsperday," "prevalentstroke," "prevalentHyp," "totChol," "sysBP," and "glucose," are then applied to the test data for model evaluation.
+
+The selected statistical learning methods, particularly classification using random forests, are well-suited for the prediction problem of estimating the ten-year risk of coronary heart disease (TenyearCHD). Random forests are robust ensemble learning methods capable of capturing complex nonlinear relationships and handling high-dimensional data. The chosen feature engineering strategies align with the assumptions and requirements of random forest classification, thereby enhancing its applicability and effectiveness in addressing the prediction problem.
+
+```{r}
+# Standardize or Normalize Numerical Variables in train data
+train_data_scaled <- train_data
+train_data_scaled[, numeric_vars] <- scale(train_data_scaled[, numeric_vars])
+
+# Standardize or Normalize Numerical Variables in Test Data
+test_data_scaled <- test_data
+test_data_scaled[, numeric_vars] <- scale(test_data_scaled[, numeric_vars])
+
+# Perform feature selection on the training data using stepwise operation
+step_model_train <- step(glm(formula = TenyearCHD ~ ., data = train_data_scaled, family = "binomial"), direction = "both")
+selected_features_stepwise_train <- names(coef(step_model_train))
+selected_features_stepwise_train <- selected_features_stepwise_train[!selected_features_stepwise_train %in% "(Intercept)"]
+selected_features_stepwise_train
+
+# Apply selected features to the test data, including TenYearCHD
+test_data_selected <- test_data_scaled[, c(selected_features_stepwise_train, "TenyearCHD")]
+
+```
+## Predictive analysis and results 
+
+The statistical learning procedure involves training a random forest model using the training data after appropriate feature engineering steps. Additionally, a random forest model using cross-validation is trained to optimize hyperparameters and ensure robustness. The trained models are then used to make predictions on the test data. The performance of the random forest models is estimated using resampling methods, particularly cross-validation. This provides a reliable estimate of the models' generalization ability. Performance metrics such as accuracy, precision, recall, F1-score, and the area under the ROC curve (AUC) are computed to assess the models' predictive capabilities.
+
+The performance of the random forest models on the test data is evaluated using the computed performance metrics. These metrics provide insights into the models' ability to correctly classify individuals at risk of coronary heart disease. Specifically, accuracy measures the overall correctness of predictions, precision measures the proportion of true positive predictions among all positive predictions, recall measures the proportion of true positive predictions among all actual positives, and the F1-score provides a balance between precision and recall. Additionally, the AUC of the ROC curve offers a comprehensive evaluation of the models' discriminatory power across different classification thresholds.
+
+```{r}
+#Modelling
+library(randomForest)
+
+# Train Random Forest Model
+set.seed(123)  # Set seed for reproducibility
+rf_model <- randomForest(TenyearCHD ~ ., 
+                         data = train_data_scaled[, c(selected_features_stepwise_train, "TenyearCHD")])
+rf_model
+
+# Train Random Forest Model using Cross-Validation
+rf_model_cv <- train(TenyearCHD ~ ., 
+                     data = train_data_scaled[, c(selected_features_stepwise_train, "TenyearCHD")],
+                     method = "rf",
+                     trControl = trainControl(method = "cv", number = 10))
+
+# Print Cross-Validation Results
+print(rf_model_cv)
+
+```
+
+```{r, echo=FALSE}
+# Make Predictions using Random Forest Model
+rf_predictions <- predict(rf_model_cv, newdata = test_data_selected)
+
+# Calculate confusion matrix
+rf_confusion_matrix <- confusionMatrix(rf_predictions, test_data_selected$TenyearCHD)
+rf_confusion_matrix
+
+# Extract performance metrics
+rf_accuracy <- rf_confusion_matrix$overall["Accuracy"]
+rf_precision <- rf_confusion_matrix$byClass["Precision"]
+rf_recall <- rf_confusion_matrix$byClass["Sensitivity"]
+rf_f1_score <- rf_confusion_matrix$byClass["F1"]
+rf_error_rate <- 1 - rf_accuracy
+
+# Print Metrics
+cat("Random Forest Model Performance:\n")
+cat("Accuracy:", rf_accuracy, "\n")
+cat("Precision:", rf_precision, "\n")
+cat("Recall:", rf_recall, "\n")
+cat("F1-score:", rf_f1_score, "\n")
+cat("Random Forest Model Error Rate:", rf_error_rate, "\n")
+
+```
+
+```{r}
+library(pROC)    
+
+# Predict probabilities for test data
+rf_probabilities <- predict(rf_model_cv, newdata = test_data_selected, type = "prob")
+
+# Calculate ROC curve
+roc_curve <- roc(test_data_selected$TenyearCHD, rf_probabilities[, "1"])
+
+# Plot ROC curve
+plot(roc_curve, main = "ROC Curve for Random Forest Model", col = "blue")
+legend("bottomright", legend = paste("AUC =", round(auc(roc_curve), 2)), col = "blue", lwd = 2)
+
+# Print AUC value
+cat("AUC:", auc(roc_curve), "\n")
+
+```
+**Discuss the results**
+
+The random forest model achieved an out-of-bag (OOB) error rate of 14.94%, indicating strong predictive performance. Despite the class imbalance, the model demonstrates high accuracy in correctly classifying individuals without CHD, with a low class error rate of 0.88%. While the class error rate for individuals with CHD (class 1) is higher at 94.32%, the model still captures a significant portion of true positive cases. The cross-validated results further validate the model's effectiveness, with an accuracy ranging from 83.73% to 84.89% across different tuning parameters. The confusion matrix and associated statistics indicate a strong overall performance of the random forest model in predicting the 10-year risk of coronary heart disease (CHD). With an accuracy of 84.97%, the model demonstrates robustness in correctly classifying individuals as either having or not having CHD. The high sensitivity (99.51%) underscores the model's ability to accurately identify individuals at risk of CHD, while the positive predictive value (85.12%) signifies the reliability of positive predictions. These results highlight the effectiveness of demographic, clinical, and lifestyle factors in predicting CHD risk, with factors such as age, cholesterol levels, and systolic blood pressure, smoking habits emerging as significant predictors. 
+
+The AUC value of 0.691863 indicates good discriminative power of the random forest model in distinguishing between individuals at high and low risk of coronary heart disease (CHD). The value suggests that the model has a high probability of ranking a randomly chosen individual with CHD higher than a randomly chosen individual without CHD. This indicates the effectiveness of the model in correctly classifying individuals based on their CHD risk, reinforcing its reliability and utility in clinical risk assessment and decision-making.
+
+## Conclusion 
+
+The predictive analysis utilizing random forest modeling demonstrates promising results in predicting the 10-year risk of coronary heart disease (CHD) based on demographic, clinical, and lifestyle factors. With an accuracy of approximately 85%, the model showcases robust performance in correctly classifying individuals as either at low or high risk of CHD. Moreover, the high sensitivity and precision values indicate the model's ability to effectively identify individuals at risk, minimizing false negatives and providing reliable positive predictions. The AUC value of 0.69 further confirms the model's discriminative power, indicating its capability to rank individuals based on their CHD risk with considerable accuracy. These findings suggest that the developed predictive model holds significant potential for clinical applications, offering valuable insights into personalized risk assessment and preventive interventions for CHD.
+
+However, while the model demonstrates notable performance, there are several considerations for its scope and generalizability. One potential limitation lies in the representativeness of the dataset and the generalizability of the findings to broader populations beyond the Framingham cohort. Additionally, the presence of imbalanced classes within the dataset may impact model performance, potentially leading to biases in predictions. To enhance the model's applicability and reliability, future research could explore incorporating additional features or leveraging advanced techniques to address class imbalance. Moreover, ongoing validation and refinement of the model using diverse datasets and external validation cohorts can further enhance its robustness and clinical utility in predicting CHD risk across different populations and settings.
+
+
